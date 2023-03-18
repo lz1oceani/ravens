@@ -482,7 +482,7 @@ class Environment(gym.Env):
       for key in all_infos:
         all_infos[key] = np.concatenate(all_infos[key], axis=-1)
         from skimage.transform import resize
-        all_infos[key] = resize(all_infos[key], (60, 80))
+        all_infos[key] = resize(all_infos[key], (84, 84))
         all_infos[key] = all_infos[key].transpose(2, 0, 1)
     ret = dict(all_infos)
     return ret
