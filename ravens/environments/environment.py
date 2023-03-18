@@ -481,8 +481,8 @@ class Environment(gym.Env):
       # print(GDict(all_infos).shape)
       for key in all_infos:
         all_infos[key] = np.concatenate(all_infos[key], axis=-1)
-        import cv2
-        all_infos[key] = cv2.resize(all_infos[key], dsize=(60, 80), interpolation=cv2.INTER_AREA)
+        from skimage.transform import resize
+        all_infos[key] = resize(all_infos[key], (60, 80))
         all_infos[key] = all_infos[key].transpose(2, 0, 1)
     ret = dict(all_infos)
     return ret
