@@ -52,7 +52,7 @@ names = {
 }
 
 
-def make_env(env_name, mode="train", obs_mode="rgb"):
+def make_env(env_name, mode="train", obs_mode="rgb", shaped_rewards=False):
     from ravens.environments.environment import ContinuousEnvironment
     import os.path as osp
     env_cls = ContinuousEnvironment
