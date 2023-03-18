@@ -70,7 +70,7 @@ def register_all():
     for env_name in names:
         register(
             id=f"{env_name}-v0",
-            entry_point=make_env,
+            entry_point="ravens.tasks.make_env",
             max_episode_steps=20,
             kwargs={
                 'env_name': env_name,
