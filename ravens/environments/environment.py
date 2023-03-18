@@ -48,7 +48,8 @@ class Environment(gym.Env):
                disp=False,
                shared_memory=False,
                hz=240,
-               use_egl=False):
+               use_egl=False,
+               obs_mode="rgb", n_points=512):
     """Creates OpenAI Gym-style environment with PyBullet.
 
     Args:
@@ -68,6 +69,8 @@ class Environment(gym.Env):
       raise ValueError('EGL rendering cannot be used with `disp=True`.')
 
     self.pix_size = 0.003125
+    self.obs_mode = obs_mode
+    self.n_points = n_points
     self.obj_ids = {'fixed': [], 'rigid': [], 'deformable': []}
     self.homej = np.array([-1, -0.5, 0.5, -0.5, -0.5, 0]) * np.pi
     self.agent_cams = cameras.RealSenseD415.CONFIG
@@ -309,6 +312,31 @@ class Environment(gym.Env):
       color += np.int32(self._random.normal(0, 3, config['image_size']))
       color = np.uint8(np.clip(color, 0, 255))
 
+    # Get point cloud
+    projm = np.asarray(projm).reshape([4, 4], order="F")
+    viewm = np.asarray(viewm).reshape([4, 4], order="F")
+    tran_pix_world = np.linalg.inv(np.matmul(projm, viewm))
+
+    # create a grid with pixel coordinates and depth values
+    y, x = np.mgrid[-1:1:2 / config['image_size'][0], -1:1:2 / config['image_size'][1]]
+    y *= -1.
+    x, y, z = x.reshape(-1), y.reshape(-1), depth.reshape(-1)
+    h = np.ones_like(z)
+
+    pixels = np.stack([x, y, z, h], axis=1)
+    # filter out "infinite" depths
+    points_flag = z < 0.99
+    # pixels = pixels[z < 0.99]
+    pixels[:, 2] = 2 * pixels[:, 2] - 1
+
+    # turn pixels to world coordinates
+    points = np.matmul(tran_pix_world, pixels.T).T
+    points /= np.clip(points[:, 3: 4], a_min=1e-9, a_max=1e9)
+    points = points[:, :3]
+    
+    # from pyrl.utils.visualization import plot_show_image
+    # plot_show_image(color / 255.0, show=True)
+
     # Get depth image.
     depth_image_size = (config['image_size'][0], config['image_size'][1])
     zbuffer = np.array(depth).reshape(depth_image_size)
@@ -319,8 +347,9 @@ class Environment(gym.Env):
 
     # Get segmentation image.
     segm = np.uint8(segm).reshape(depth_image_size)
-
-    return color, depth, segm
+    
+    
+    return color, depth, segm, points, points_flag
 
   @property
   def info(self):
@@ -397,13 +426,81 @@ class Environment(gym.Env):
 
   def _get_obs(self):
     # Get RGB-D camera image observations.
-    obs = {'color': (), 'depth': ()}
+    from collections import defaultdict
+    all_infos = defaultdict(list)
+    # obs = {'rgb': (), 'depth': (), "segm": (), "xyz": ()}
+    
     for config in self.agent_cams:
-      color, depth, _ = self.render_camera(config)
-      obs['color'] += (color,)
-      obs['depth'] += (depth,)
-
-    return obs
+      rgb, depth, seg, xyz, flag = self.render_camera(config)
+      if self.obs_mode == "pcd":
+        rgb = rgb.reshape(-1, 3)
+        depth = depth.reshape(-1)
+        seg = seg.reshape(-1)
+      obs_i = {"rgb": rgb, "depth": depth, "seg": seg, "xyz": xyz, "flag": flag}
+      for key in obs_i:
+        all_infos[key].append(obs_i[key])
+        
+    from pyrl.utils.data import GDict
+    if self.obs_mode == "pcd":
+      for key in all_infos:
+        all_infos[key] = np.concatenate(all_infos[key], axis=0)
+      points_flag = all_infos["flag"]
+      
+      from pyrl.utils.visualization import visualize_pcd
+      # print(all_infos["xyz"][points_flag].min(), all_infos["xyz"][points_flag].max())
+      # print(all_infos["rgb"].min(), all_infos["rgb"].max())
+      # exit(0)
+      # print(GDict(all_infos).shape)
+      # print(seg.min(), seg.max())
+      # exit(0)
+      points_flag = np.logical_and(all_infos["seg"] >= 2, points_flag)
+      for key in all_infos:
+        all_infos[key] = all_infos[key][points_flag]
+      
+      robot_flag = all_infos["seg"] == 2
+      other_flag = all_infos["seg"] != 2
+      
+      robot_index = np.where(robot_flag)[0]
+      other_index = np.where(other_flag)[0]
+      np.random.shuffle(robot_index)
+      np.random.shuffle(other_index)
+      robot_index = robot_index[:self.n_points // 2]    
+      other_index = other_index[:self.n_points // 2]
+      
+      
+      for key in all_infos:
+        item = all_infos[key]
+        all_infos[key] = np.concatenate([item[robot_index], item[other_index]], axis=0)
+      
+      # for idx in np.unique(all_infos["seg"]):
+      #   flag = all_infos["seg"] == idx
+      #   print(idx, np.sum(flag))
+      # self.
+        
+        
+        # visualize_pcd(all_infos["xyz"][flag], all_infos["rgb"][flag] / 255, show_frame=True)
+      # exit(0)
+        
+      # indices = np.arange(all_infos["xyz"].shape[0])
+      # self._random.shuffle(indices)
+      # indices = indices[:self.n_points]
+      
+      # for key in all_infos:
+      #   all_infos[key] = all_infos[key][indices]
+      # visualize_pcd(all_infos["xyz"], all_infos["rgb"] / 255, show_frame=False)
+      # exit(0)
+    else:
+      for key in ["seg", "xyz", "flag"]:
+        all_infos.pop(key)
+      if self.obs_mode == "rgb":
+        all_infos.pop("depth")
+      if self.obs_mode == "xyz":
+        all_infos.pop("depth")
+      # print(GDict(all_infos).shape)
+      for key in all_infos:
+        all_infos[key] = np.concatenate(all_infos[key], axis=-1).transpose(2, 0, 1)
+    ret = dict(all_infos)
+    return ret
 
 
 class EnvironmentNoRotationsWithHeightmap(Environment):
@@ -468,48 +565,49 @@ class ContinuousEnvironment(Environment):
 
     # Redefine action space, assuming it's a suction-based task. We'll override
     # it in `reset()` if that is not the case.
-    self.position_bounds = gym.spaces.Box(
-        low=np.array([-1.0, -1.0, -1.0], dtype=np.float32),
-        high=np.array([1.0, 1.0, 1.0], dtype=np.float32),
-        shape=(3,),
-        dtype=np.float32
-    )
-    self.action_space = gym.spaces.Dict({
-        'move_cmd':
-            gym.spaces.Tuple(
-                (self.position_bounds,
-                 gym.spaces.Box(-1.0, 1.0, shape=(4,), dtype=np.float32))),
-        'suction_cmd': gym.spaces.Discrete(2),  # Binary 0-1.
-        'acts_left': gym.spaces.Discrete(1000),
-    })
+    low = np.full(8, -1.0, dtype=np.float32)
+    low[-1] = 0
+    high = np.full(8, 1.0, dtype=np.float32)
+    self.action_space = gym.spaces.Box(low, high, shape=(8,), dtype=np.float32)
+    self.seed()
 
   def set_task(self, task):
     super().set_task(task)
 
     # Redefine the action-space in case it is a pushing task. At this point, the
     # ee has been instantiated.
-    if self.task.ee == Spatula:
-      self.action_space = gym.spaces.Dict({
-          'move_cmd':
-              gym.spaces.Tuple(
-                  (self.position_bounds,
-                   gym.spaces.Box(-1.0, 1.0, shape=(4,), dtype=np.float32))),
-          'slowdown_cmd': gym.spaces.Discrete(2),  # Binary 0-1.
-          'acts_left': gym.spaces.Discrete(1000),
-      })
+    # if self.task.ee == Spatula:
+    #   self.action_space = gym.spaces.Dict({
+    #       'move_cmd':
+    #           gym.spaces.Tuple(
+    #               (self.position_bounds,
+    #                gym.spaces.Box(-1.0, 1.0, shape=(4,), dtype=np.float32))),
+    #       'slowdown_cmd': gym.spaces.Discrete(2),  # Binary 0-1.
+    #       'acts_left': gym.spaces.Discrete(1000),
+    #   })
 
   def get_ee_pose(self):
     return p.getLinkState(self.ur5, self.ee_tip)[0:2]
 
   def step(self, action=None):
     if action is not None:
-      timeout = self.task.primitive(self.movej, self.movep, self.ee, action)
+      primitive_action = {}
+      move_cmd = (action[:3], action[3:7])
+      primitive_action["move_cmd"] = move_cmd
+      p = action[7]
+      cmd = self._random.choice([0, 1], size=1, replace=False, p=[1 - p, p]).item() > 0.5
+      if self.task.ee == Spatula:
+        primitive_action["slowdown_cmd"] = cmd
+      else:
+        primitive_action["suction_cmd"] = cmd
+      
+      timeout = self.task.primitive(self.movej, self.movep, self.ee, primitive_action)
 
       # Exit early if action times out. We still return an observation
       # so that we don't break the Gym API contract.
       if timeout:
         obs = self._get_obs()
-        return obs, 0.0, True, self.info
+        return obs, 0.0, False, self.info
 
     # Step simulator asynchronously until objects settle.
     while not self.is_static:
@@ -517,15 +615,17 @@ class ContinuousEnvironment(Environment):
 
     # Get task rewards.
     reward, info = self.task.reward() if action is not None else (0, {})
-    task_done = self.task.done()
-    if action is not None:
-      done = task_done and action['acts_left'] == 0
-    else:
-      done = task_done
+    # print(self.task, reward)
+    # exit(0)
+    # task_done = self.task.done()
+    # if action is not None:
+    #   done = task_done and action['acts_left'] == 0
+    # else:
+    #   done = task_done
 
     # Add ground truth robot state into info.
     info.update(self.info)
 
     obs = self._get_obs()
 
-    return obs, reward, done, info
+    return obs, reward, False, info

@@ -17,7 +17,7 @@
 
 import os
 
-import cv2
+# import cv2
 import numpy as np
 from ravens.models.attention import Attention
 from ravens.models.matching import Matching
@@ -140,6 +140,7 @@ class Form2FitAgent:
         input_image, apply_softmax=True).squeeze()
     descriptors = np.float32(self.match_model.forward(input_image))
 
+    import cv2
     # V4
     pick_heatmap = cv2.GaussianBlur(pick_heatmap, (49, 49), 0)
     place_heatmap = cv2.GaussianBlur(place_heatmap, (49, 49), 0)

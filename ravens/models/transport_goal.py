@@ -15,7 +15,7 @@
 
 """Goal-conditioned transport Module."""
 
-import cv2
+# import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from ravens.models.resnet import ResNet43_8s
@@ -248,6 +248,7 @@ class TransportGoal:
     del p
     del in_img
     del input_data
+    import cv2
 
     def colorize(img):
       # I don't think we have to convert to BGR here...
@@ -288,6 +289,7 @@ class TransportGoal:
     on the logits. [Update: wait, then why should we have a softmax,
     then? I forgot why we did this ...]
     """
+    import cv2
     original_shape = logits.shape
     logits = tf.reshape(logits, (1, np.prod(original_shape)))
     # logits = tf.nn.softmax(logits)  # Is this necessary?

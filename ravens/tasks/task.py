@@ -21,7 +21,7 @@ import random
 import string
 import tempfile
 
-import cv2
+# import cv2
 import numpy as np
 from ravens.tasks import cameras
 from ravens.tasks import planners
@@ -323,7 +323,7 @@ class Task():
     """Get RGB-D orthographic heightmaps and segmentation masks."""
 
     # Capture near-orthographic RGB-D images and segmentation masks.
-    color, depth, segm = env.render_camera(self.oracle_cams[0])
+    color, depth, segm = env.render_camera(self.oracle_cams[0])[:3]
 
     # Combine color with masks for faster processing.
     color = np.concatenate((color, segm[Ellipsis, None]), axis=2)
@@ -345,7 +345,7 @@ class Task():
     max_size = np.sqrt(obj_size[0]**2 + obj_size[1]**2)
     erode_size = int(np.round(max_size / self.pix_size))
 
-    _, hmap, obj_mask = self.get_true_image(env)
+    _, hmap, obj_mask = self.get_true_image(env)[:3]
 
     # Randomly sample an object pose within free-space pixels.
     free = np.ones(obj_mask.shape, dtype=np.uint8)
@@ -353,6 +353,7 @@ class Task():
       for obj_id in obj_ids:
         free[obj_mask == obj_id] = 0
     free[0, :], free[:, 0], free[-1, :], free[:, -1] = 0, 0, 0, 0
+    import cv2
     free = cv2.erode(free, np.ones((erode_size, erode_size), np.uint8))
     if np.sum(free) == 0:
       return None, None

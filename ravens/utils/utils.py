@@ -15,7 +15,7 @@
 
 """Miscellaneous utilities."""
 
-import cv2
+# import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import meshcat
@@ -166,7 +166,7 @@ def unproject_vectorized(uv_coordinates, depth_values,
   """
   cam_mtx = intrinsic  # shape [3, 3]
   cam_dist = np.array(distortion)  # shape [5]
-
+  import cv2
   # shape of points_undistorted is [N, 2] after the squeeze().
   points_undistorted = cv2.undistortPoints(
       uv_coordinates.reshape((-1, 1, 2)), cam_mtx, cam_dist).squeeze()
@@ -461,7 +461,7 @@ def perturb(input_image, pixels, set_theta_zero=False):
       new_rounded_pixels.append(rounded_pixel)
     if is_valid:
       break
-
+  import cv2
   # Apply rigid transform to image and pixel labels.
   input_image = cv2.warpAffine(
       input_image,
