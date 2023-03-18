@@ -471,24 +471,6 @@ class Environment(gym.Env):
       for key in all_infos:
         item = all_infos[key]
         all_infos[key] = np.concatenate([item[robot_index], item[other_index]], axis=0)
-      
-      # for idx in np.unique(all_infos["seg"]):
-      #   flag = all_infos["seg"] == idx
-      #   print(idx, np.sum(flag))
-      # self.
-        
-        
-        # visualize_pcd(all_infos["xyz"][flag], all_infos["rgb"][flag] / 255, show_frame=True)
-      # exit(0)
-        
-      # indices = np.arange(all_infos["xyz"].shape[0])
-      # self._random.shuffle(indices)
-      # indices = indices[:self.n_points]
-      
-      # for key in all_infos:
-      #   all_infos[key] = all_infos[key][indices]
-      # visualize_pcd(all_infos["xyz"], all_infos["rgb"] / 255, show_frame=False)
-      # exit(0)
     else:
       for key in ["seg", "xyz", "flag"]:
         all_infos.pop(key)
@@ -498,7 +480,10 @@ class Environment(gym.Env):
         all_infos.pop("depth")
       # print(GDict(all_infos).shape)
       for key in all_infos:
-        all_infos[key] = np.concatenate(all_infos[key], axis=-1).transpose(2, 0, 1)
+        all_infos[key] = np.concatenate(all_infos[key], axis=-1)
+        import cv2
+        all_infos[key] = cv2.resize(all_infos[key], dsize=(60, 80), interpolation=cv2.INTER_AREA)
+        all_infos[key] = all_infos[key].transpose(2, 0, 1)
     ret = dict(all_infos)
     return ret
 
