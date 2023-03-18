@@ -440,13 +440,13 @@ class Environment(gym.Env):
       for key in obs_i:
         all_infos[key].append(obs_i[key])
         
-    from pyrl.utils.data import GDict
+    # from pyrl.utils.data import GDict
     if self.obs_mode == "pcd":
       for key in all_infos:
         all_infos[key] = np.concatenate(all_infos[key], axis=0)
       points_flag = all_infos["flag"]
       
-      from pyrl.utils.visualization import visualize_pcd
+      # from pyrl.utils.visualization import visualize_pcd
       # print(all_infos["xyz"][points_flag].min(), all_infos["xyz"][points_flag].max())
       # print(all_infos["rgb"].min(), all_infos["rgb"].max())
       # exit(0)
